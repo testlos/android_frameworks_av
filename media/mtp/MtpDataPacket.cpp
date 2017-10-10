@@ -440,7 +440,9 @@ void MtpDataPacket::putString(const uint16_t* string) {
 
 #ifdef MTP_DEVICE 
 int MtpDataPacket::read(int fd) {
-    int ret = ::read(fd, mBuffer, MTP_BUFFER_SIZE);
+    /* SPRD: modify code for bug 492017. @{ */
+    int ret = ::read(fd, mBuffer, 512);
+    /* @} */
     if (ret < MTP_CONTAINER_HEADER_SIZE)
         return -1;
     mPacketSize = ret;

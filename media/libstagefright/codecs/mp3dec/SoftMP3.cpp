@@ -351,7 +351,9 @@ void SoftMP3::onQueueFilled(OMX_U32 /* portIndex */) {
             }
         } else if (mConfig->samplingRate != mSamplingRate
                 || mConfig->num_channels != mNumChannels) {
-            mSamplingRate = mConfig->samplingRate;
+            if (0 != mConfig->samplingRate) {
+                mSamplingRate = mConfig->samplingRate;
+            }
             mNumChannels = mConfig->num_channels;
 
             notify(OMX_EventPortSettingsChanged, 1, 0, NULL);
@@ -372,6 +374,10 @@ void SoftMP3::onQueueFilled(OMX_U32 /* portIndex */) {
         } else if (!mSignalledOutputEos) {
             outHeader->nOffset = 0;
             outHeader->nFilledLen = mConfig->outputFrameSize * sizeof(int16_t);
+        }
+
+        if (0 == mConfig->samplingRate) {
+            mConfig->samplingRate = mSamplingRate;
         }
 
         outHeader->nTimeStamp =

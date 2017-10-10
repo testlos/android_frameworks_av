@@ -32,6 +32,8 @@
 #include "include/FLACExtractor.h"
 #include "include/AACExtractor.h"
 #include "include/MidiExtractor.h"
+#include "include/AVIExtractor.h"
+#include "include/FLVExtractor.h"
 
 #include "matroska/MatroskaExtractor.h"
 
@@ -48,6 +50,7 @@
 #include <cutils/properties.h>
 #include <utils/String8.h>
 #include <private/android_filesystem_config.h>
+#include <media/stagefright/MP3FileSource.h>
 
 #include <media/stagefright/FFMPEGSoftCodec.h>
 #include <stagefright/AVExtensions.h>
@@ -241,29 +244,53 @@ sp<MediaExtractor> MediaExtractor::CreateFromService(
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_MPEG4)
             || !strcasecmp(mime, "audio/mp4")) {
         ret = new MPEG4Extractor(source);
-    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_MPEG)) {
-        ret = new MP3Extractor(source, meta);
+    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_MPEG) ||
+            !strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_BP3) ||
+            !strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_MP3) ||
+            !strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_MPG3)) {
+        int fd = 0;
+        int64_t offset = 0;
+        int64_t length = 0;
+        source->getFd(&fd,&offset);
+        source->getSize(&length);
+        //ALOGD("fd:%d,length:%lld,offset:%lld",fd,(long long)length,(long long)offset);
+        if(fd > 0 && !isDrm)
+            ret = new MP3Extractor(new MP3FileSource(fd, offset, length), meta);
+        else
+            ret = new MP3Extractor(source, meta);
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AMR_NB)
-            || !strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AMR_WB)) {
+            || !strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AMR_WB)
+            || !strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AMR)) {
         ret = new AMRExtractor(source);
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_FLAC)) {
         ret = new FLACExtractor(source);
-    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_WAV)) {
+    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_WAV) ||
+    		   !strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_WAV2)) {
         ret = new WAVExtractor(source);
-    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_OGG)) {
+    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_OGG) ||
+    		   !strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_OGG2)) {
         ret = new OggExtractor(source);
-    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_MATROSKA)) {
+    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_MATROSKA) ||
+           !strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_WEBM)) {
         ret = new MatroskaExtractor(source);
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_MPEG2TS)) {
         ret = new MPEG2TSExtractor(source);
+    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_AVI) ||
+                    !strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_MSVIDEO)) {
+        ret = new AVIExtractor(source);
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_WVM) && getuid() == AID_MEDIA) {
         // Return now.  WVExtractor should not have the DrmFlag set in the block below.
         return new WVMExtractor(source);
-    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AAC_ADTS)) {
+    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_FLV)) {
+        ret = new FLVExtractor(source);
+    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AAC_ADTS) ||
+                   !strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AAC2) ||
+                   !strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AAC3)) {
         ret = new AACExtractor(source, meta);
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_MPEG2PS)) {
         ret = new MPEG2PSExtractor(source);
-    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_MIDI)) {
+    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_MIDI) ||
+                   !strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_MIDI1)) {
         ret = new MidiExtractor(source);
     } else if (!isDrm) {
         ret = FFMPEGSoftCodec::createExtractor(source, mime, meta);

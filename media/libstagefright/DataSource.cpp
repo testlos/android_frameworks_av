@@ -33,8 +33,11 @@
 #include "include/WAVExtractor.h"
 #include "include/WVMExtractor.h"
 
+#include "include/AVIExtractor.h"
+#include "include/FLVExtractor.h"
 #include "matroska/MatroskaExtractor.h"
 
+#include "include/PSXSTRExtractor.h"
 #include <media/IMediaHTTPConnection.h>
 #include <media/IMediaHTTPService.h>
 #include <media/stagefright/foundation/ADebug.h>
@@ -196,6 +199,9 @@ void DataSource::RegisterDefaultSniffers() {
         RegisterSniffer_l(SniffWVM);
     }
     RegisterSniffer_l(SniffMidi);
+    RegisterSniffer_l(SniffAVI);
+    RegisterSniffer_l(SniffPSXSTR);
+    RegisterSniffer_l(SniffFLV);
     RegisterSniffer_l(AVUtils::get()->getExtendedSniffer());
     RegisterSniffer_l(FFMPEGSoftCodec::getSniffer());
 

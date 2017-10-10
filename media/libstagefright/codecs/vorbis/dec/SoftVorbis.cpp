@@ -401,6 +401,7 @@ void SoftVorbis::onQueueFilled(OMX_U32 portIndex) {
 #else
             ALOGW("vorbis_dsp_synthesis returned %d", err);
 #endif
+        mNumFramesLeftOnPage = -1; //parameter need to init when seeking action
         } else {
             size_t numSamplesPerBuffer = kMaxNumSamplesPerBuffer;
             if (numSamplesPerBuffer > outHeader->nAllocLen / sizeof(int16_t)) {

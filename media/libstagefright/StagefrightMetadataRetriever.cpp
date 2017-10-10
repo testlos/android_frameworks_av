@@ -168,10 +168,10 @@ static VideoFrame *extractVideoFrame(
     // input and output ports, if seeking to a sync frame. NOTE: This request may
     // fail if component requires more than that for decoding.
     bool isSeekingClosest = (seekMode == MediaSource::ReadOptions::SEEK_CLOSEST);
-    if (!isSeekingClosest) {
+    /*if (!isSeekingClosest) {
         videoFormat->setInt32("android._num-input-buffers", 1);
         videoFormat->setInt32("android._num-output-buffers", 1);
-    }
+    }*/
 
     status_t err;
     sp<ALooper> looper = new ALooper;
@@ -184,7 +184,8 @@ static VideoFrame *extractVideoFrame(
         return NULL;
     }
 
-    err = decoder->configure(videoFormat, NULL /* surface */, NULL /* crypto */, 0 /* flags */);
+    err = decoder->configure(videoFormat, NULL /* surface */, NULL /* crypto */,
+                                            MediaCodec::CONFIGURE_FLAG_THUMBNAIL/* flags */);
     if (err != OK) {
         ALOGW("configure returned error %d (%s)", err, asString(err));
         decoder->release();

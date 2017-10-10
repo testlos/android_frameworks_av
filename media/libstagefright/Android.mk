@@ -78,6 +78,10 @@ LOCAL_SRC_FILES:=                         \
         XINGSeeker.cpp                    \
         avc_utils.cpp                     \
         FFMPEGSoftCodec.cpp               \
+        AVIExtractor.cpp                  \
+        FLVExtractor.cpp                  \
+        FileCache.cpp                     \
+        MP3FileSource.cpp                 \
 
 LOCAL_C_INCLUDES:= \
         $(TOP)/frameworks/av/include/media/ \
@@ -200,6 +204,10 @@ LOCAL_CFLAGS += -DUSE_SAMSUNG_COLORFORMAT
 LOCAL_C_INCLUDES += \
 	$(TOP)/hardware/samsung/exynos4/hal/include \
 	$(TOP)/hardware/samsung/exynos4/include
+endif
+
+ifeq ($(BOARD_USE_SPRD_COLORFORMAT), true)
+LOCAL_CFLAGS += -DUSE_SPRD_COLORFORMAT
 endif
 
 LOCAL_MODULE:= libstagefright

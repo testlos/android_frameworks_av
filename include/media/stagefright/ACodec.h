@@ -495,6 +495,8 @@ protected:
     status_t setupEAC3Codec(bool encoder, int32_t numChannels, int32_t sampleRate,
             AudioEncoding encoding = kAudioEncodingPcm16bit);
 
+    status_t setIMAADPCMFormat(int32_t numChannels, int32_t sampleRate, int32_t blockAlign);
+
     status_t selectAudioPortFormat(
             OMX_U32 portIndex, OMX_AUDIO_CODINGTYPE desiredFormat);
 

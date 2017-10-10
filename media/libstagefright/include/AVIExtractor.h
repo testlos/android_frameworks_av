@@ -25,18 +25,24 @@
 
 namespace android {
 
+//for broken files, cannot get samplesize
+#define AVI_VIDEO_SAMPLE_MAX_SIZE (192<<10)
+#define AVI_AUDIO_SAMPLE_MAX_SIZE (12 <<10)
+
 struct AVIExtractor : public MediaExtractor {
     AVIExtractor(const sp<DataSource> &dataSource);
 
     virtual size_t countTracks();
 
-    virtual sp<MediaSource> getTrack(size_t index);
+    virtual sp<IMediaSource> getTrack(size_t index);
 
     virtual sp<MetaData> getTrackMetaData(
             size_t index, uint32_t flags);
 
     virtual sp<MetaData> getMetaData();
     virtual const char * name() { return "AVIExtractor"; }
+
+    virtual uint32_t flags() const;
 
 protected:
     virtual ~AVIExtractor();
@@ -48,6 +54,7 @@ private:
     struct SampleInfo {
         uint32_t mOffset;
         bool mIsKey;
+        uint32_t mLengthTotal;
     };
 
     struct Track {
@@ -73,10 +80,27 @@ private:
         ssize_t mThumbnailSampleIndex;
         size_t mMaxSampleSize;
 
+        // if no index
+        uint32_t mCurSamplePos;
+
         // If mBytesPerSample > 0:
         double mAvgChunkSize;
         size_t mFirstChunkSize;
+
+        //for avi seeking
+        size_t mPreChunkSize;
+        uint32_t mLengthTotal;
+
+        //bits per sample for pcm
+        size_t mBitsPerSample;
     };
+
+    enum IndexType
+    {
+        IDX1,        //avi1.0 index
+        INDX,        //Open-DML-Index-chunk
+        NO_INDEX     //normally no idx1, since indx is stored  with a/v data together
+    } mIndexType;
 
     sp<DataSource> mDataSource;
     status_t mInitCheck;
@@ -89,7 +113,8 @@ private:
     ssize_t parseChunk(off64_t offset, off64_t size, int depth = 0);
     status_t parseStreamHeader(off64_t offset, size_t size);
     status_t parseStreamFormat(off64_t offset, size_t size);
-    status_t parseIndex(off64_t offset, size_t size);
+    status_t parseIdx1(off64_t offset, size_t size);
+    status_t parseIndx(off64_t offset, size_t size);
 
     status_t parseHeaders();
 

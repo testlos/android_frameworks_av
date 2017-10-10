@@ -442,8 +442,10 @@ bool MtpServer::handleRequest() {
             break;
     }
 
-    if (response == MTP_RESPONSE_TRANSACTION_CANCELLED)
-        return false;
+    /* SPRD: modify code for bug 491977. @{ */
+    //if (response == MTP_RESPONSE_TRANSACTION_CANCELLED)
+        //return false;
+    /* @} */
     mResponse.setResponseCode(response);
     return true;
 }

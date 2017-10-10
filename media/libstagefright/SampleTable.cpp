@@ -614,7 +614,7 @@ status_t SampleTable::getMaxSampleSize(size_t *max_size) {
     return OK;
 }
 
-uint32_t abs_difference(uint32_t time1, uint32_t time2) {
+uint64_t abs_difference(uint64_t time1, uint64_t time2) {
     return time1 > time2 ? time1 - time2 : time2 - time1;
 }
 
@@ -662,7 +662,7 @@ void SampleTable::buildSampleEntriesTable() {
     }
 
     uint32_t sampleIndex = 0;
-    uint32_t sampleTime = 0;
+    uint64_t sampleTime = 0;
 
     for (uint32_t i = 0; i < mTimeToSampleCount; ++i) {
         uint32_t n = mTimeToSample[2 * i];
@@ -685,7 +685,7 @@ void SampleTable::buildSampleEntriesTable() {
                                 INT32_MAX : uint32_t(-compTimeDelta)))
                         || (compTimeDelta > 0 &&
                                 sampleTime > UINT32_MAX - compTimeDelta)) {
-                    ALOGE("%u + %d would overflow, clamping",
+                    ALOGE("%llu + %d would overflow, clamping",
                             sampleTime, compTimeDelta);
                     if (compTimeDelta < 0) {
                         sampleTime = 0;
@@ -856,19 +856,19 @@ status_t SampleTable::findSyncSampleNear(
             if (err != OK) {
                 return err;
             }
-            uint32_t sample_time = mSampleIterator->getSampleTime();
+            uint64_t sample_time = mSampleIterator->getSampleTime();
 
             err = mSampleIterator->seekTo(mSyncSamples[left]);
             if (err != OK) {
                 return err;
             }
-            uint32_t upper_time = mSampleIterator->getSampleTime();
+            uint64_t upper_time = mSampleIterator->getSampleTime();
 
             err = mSampleIterator->seekTo(mSyncSamples[left - 1]);
             if (err != OK) {
                 return err;
             }
-            uint32_t lower_time = mSampleIterator->getSampleTime();
+            uint64_t lower_time = mSampleIterator->getSampleTime();
 
             // use abs_difference for safety
             if (abs_difference(upper_time, sample_time) >
@@ -936,7 +936,7 @@ status_t SampleTable::getMetaDataForSample(
         uint32_t sampleIndex,
         off64_t *offset,
         size_t *size,
-        uint32_t *compositionTime,
+        uint64_t *compositionTime,
         bool *isSyncSample,
         uint32_t *sampleDuration) {
     Mutex::Autolock autoLock(mLock);

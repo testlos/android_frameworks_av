@@ -1770,6 +1770,10 @@ void MediaCodec::onMessageReceived(const sp<AMessage> &msg) {
                 mFlags |= kFlagIsEncoder;
             }
 
+            if (flags & CONFIGURE_FLAG_THUMBNAIL) {
+                format->setInt32("thumbnail", true);
+            }
+
             extractCSD(format);
 
             mCodec->initiateConfigureComponent(format);

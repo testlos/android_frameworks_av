@@ -39,6 +39,7 @@ public:
 
     virtual sp<MetaData> getMetaData();
     virtual const char * name() { return "MP3Extractor"; }
+    bool TestVBR(const sp<DataSource> &source, int *avg_bitrate, uint32_t match_header,off64_t inout_pos);
 
 private:
     status_t mInitCheck;
@@ -48,6 +49,7 @@ private:
     sp<MetaData> mMeta;
     uint32_t mFixedHeader;
     sp<MP3Seeker> mSeeker;
+    bool mIsVbr;
 
     MP3Extractor(const MP3Extractor &);
     MP3Extractor &operator=(const MP3Extractor &);

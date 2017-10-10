@@ -130,6 +130,8 @@ static int32_t getColorFormat(const char* colorFormat) {
 #ifdef USE_SAMSUNG_COLORFORMAT
         static const int OMX_SEC_COLOR_FormatNV12LPhysicalAddress = 0x7F000002;
         return OMX_SEC_COLOR_FormatNV12LPhysicalAddress;
+#elif USE_SPRD_COLORFORMAT
+        return OMX_SPRD_COLOR_FormatYVU420SemiPlanar;
 #else
         return OMX_COLOR_FormatYUV420SemiPlanar;
 #endif

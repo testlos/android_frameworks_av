@@ -46,6 +46,11 @@ public:
         kIsHTTPBasedSource     = 8,
     };
 
+    virtual void getFd(int *fd, int64_t *offset) {
+        *fd = -1;
+        *offset = 0;
+    }
+
     static sp<DataSource> CreateFromURI(
             const sp<IMediaHTTPService> &httpService,
             const char *uri,

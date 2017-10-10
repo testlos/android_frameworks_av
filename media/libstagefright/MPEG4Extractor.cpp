@@ -375,6 +375,10 @@ static const char *FourCC2MIME(uint32_t fourcc) {
         case FOURCC('h', 'v', 'c', '1'):
         case FOURCC('h', 'e', 'v', '1'):
             return MEDIA_MIMETYPE_VIDEO_HEVC;
+
+        case FOURCC('j', 'p', 'e', 'g'):
+        case FOURCC('M', 'J', 'P', 'G'):
+            return MEDIA_MIMETYPE_VIDEO_MJPG;
 #ifdef DOLBY_ENABLE
         case FOURCC('a', 'c', '-', '3'):
             ALOGV("@DDP Track FOURCC = 'ac-3'");
@@ -535,7 +539,7 @@ sp<MetaData> MPEG4Extractor::getTrackMetaData(
                 }
             } else {
                 uint32_t sampleIndex;
-                uint32_t sampleTime;
+                uint64_t sampleTime;
                 if (track->timescale != 0 &&
                         track->sampleTable->findThumbnailSample(&sampleIndex) == OK
                         && track->sampleTable->getMetaDataForSample(
@@ -1443,6 +1447,7 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
         case FOURCC('e', 'n', 'c', 'a'):
         case FOURCC('s', 'a', 'm', 'r'):
         case FOURCC('s', 'a', 'w', 'b'):
+        case FOURCC('.', 'm', 'p', '3'):
 #ifdef DOLBY_ENABLE
         case FOURCC('a', 'c', '-', '3'):
         case FOURCC('e', 'c', '-', '3'):
@@ -1652,6 +1657,8 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
         case FOURCC('a', 'v', 'c', '1'):
         case FOURCC('h', 'v', 'c', '1'):
         case FOURCC('h', 'e', 'v', '1'):
+        case FOURCC('j', 'p', 'e', 'g'):
+        case FOURCC('M', 'J', 'P', 'G'):
         {
             uint8_t buffer[78];
             if (chunk_data_size < (ssize_t)sizeof(buffer)) {
@@ -1963,6 +1970,69 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
             mLastTrack->meta->setData(
                     kKeyESDS, kTypeESDS, &buffer[4], chunk_data_size - 4);
 
+            {
+                //add esds parser to find true MIME type from fake mp4v stream
+                //by wenan.hu
+                const char *mime;
+                mLastTrack->meta->findCString(kKeyMIMEType, &mime);
+                if (!strcasecmp(mime, MEDIA_MIMETYPE_VIDEO_MPEG4)) {
+                    #define MP4ESDescrTag                   0x03
+                    #define MP4DecConfigDescrTag            0x04
+
+                    int tag, size, flags;
+                    int idx = 4;
+                    int count = 4;
+
+                    tag = buffer[idx];
+                    idx++;
+
+                    while (count--) {
+                        size = buffer[idx];
+                        idx++;
+                        if (!(size & 0x80))
+                            break;
+                    }
+
+                    if (tag == MP4ESDescrTag) {
+                        idx += 2;  //skip es id
+                        flags = buffer[idx];
+                        idx++;
+                        if (flags & 0x80)
+                            idx += 2;  //skip streamDependenceFlag
+                        if (flags & 0x40) {
+                            int len = buffer[idx];
+                            idx++;
+                            idx += len;  //skip URL_Flag
+                        }
+                        if (flags & 0x20)
+                            idx += 2;  //skip OCRstreamFlag
+                    } else {
+                        idx += 2;  //skip ID
+                    }
+
+                    tag = buffer[idx];
+                    idx++;
+                    count = 4;
+
+                    while (count--) {
+                        size = buffer[idx];
+                        idx++;
+                        if (!(size & 0x80))
+                            break;
+                    }
+
+                    if (tag == MP4DecConfigDescrTag) {
+                        int object_type_id = buffer[idx];
+
+                        ALOGD("object type id: 0x%x", object_type_id);
+                        if (object_type_id >= 0x61 && object_type_id <= 0x65) {
+                            ALOGD("find MPEG2 video stream!");
+                            mLastTrack->meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_MPEG2);
+                        }
+                    }
+                }
+            }
+
             if (mPath.size() >= 2
                     && mPath[mPath.size() - 2] == FOURCC('m', 'p', '4', 'a')) {
                 // Information from the ESDS must be relied on for proper
@@ -2105,7 +2175,7 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
         case FOURCC('m', 'e', 't', 'a'):
         {
             off64_t stop_offset = *offset + chunk_size;
-            *offset = data_offset;
+            //*offset = data_offset;
             bool isParsingMetaKeys = underQTMetaPath(mPath, 2);
             if (!isParsingMetaKeys) {
                 uint8_t buffer[4];
@@ -2130,7 +2200,9 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
                     *offset = stop_offset;
                     return OK;
                 }
-                *offset +=  sizeof(buffer);
+                *offset = data_offset + sizeof(buffer);
+            } else {
+                *offset = data_offset;
             }
 
             while (*offset < stop_offset) {
@@ -4567,7 +4639,7 @@ status_t MPEG4Source::read(
                     sampleIndex, &syncSampleIndex, findFlags);
         }
 
-        uint32_t sampleTime;
+        uint64_t sampleTime;
         if (err == OK) {
             err = mSampleTable->getMetaDataForSample(
                     sampleIndex, NULL, NULL, &sampleTime);
@@ -4591,7 +4663,7 @@ status_t MPEG4Source::read(
         }
 
 #if 0
-        uint32_t syncSampleTime;
+        uint64_t syncSampleTime;
         CHECK_EQ(OK, mSampleTable->getMetaDataForSample(
                     syncSampleIndex, NULL, NULL, &syncSampleTime));
 
@@ -4613,7 +4685,8 @@ status_t MPEG4Source::read(
 
     off64_t offset;
     size_t size;
-    uint32_t cts, stts;
+    uint64_t cts;
+    uint32_t stts;
     bool isSyncSample;
     bool newBuffer = false;
     if (mBuffer == NULL) {
@@ -4624,6 +4697,9 @@ status_t MPEG4Source::read(
                     mCurrentSampleIndex, &offset, &size, &cts, &isSyncSample, &stts);
 
         if (err != OK) {
+            if (err == ERROR_OUT_OF_RANGE) {
+                err = ERROR_END_OF_STREAM;
+            }
             return err;
         }
 
@@ -4752,6 +4828,14 @@ status_t MPEG4Source::read(
                     nalLength = parseNALSize(&mSrcBuffer[srcOffset]);
                     srcOffset += mNALLengthSize;
                     isMalFormed = !isInRange((size_t)0u, size, srcOffset, nalLength);
+                    if (isMalFormed) {
+                        if (srcOffset + nalLength > size) {
+                            nalLength = size - srcOffset;
+                            isMalFormed = false;
+                            ALOGI("second, srcOffset: %zd, nalLength: %zd, size: %zd, isMalFormed: %d",
+                                srcOffset,nalLength,size,isMalFormed);
+                        }
+                    }
                 }
 
                 if (isMalFormed) {
@@ -5197,6 +5281,7 @@ static bool isCompatibleBrand(uint32_t fourcc) {
         FOURCC('3', 'g', 'p', '4'),
         FOURCC('m', 'p', '4', '1'),
         FOURCC('m', 'p', '4', '2'),
+        FOURCC('w', 'm', 'f', ' '),
 
         // Won't promise that the following file types can be played.
         // Just give these file types a chance.

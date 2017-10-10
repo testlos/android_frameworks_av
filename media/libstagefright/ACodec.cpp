@@ -1780,8 +1780,12 @@ const char *ACodec::getComponentRole(
             "video_decoder.mpeg2", "video_encoder.mpeg2" },
         { MEDIA_MIMETYPE_AUDIO_AC3,
             "audio_decoder.ac3", "audio_encoder.ac3" },
+        { MEDIA_MIMETYPE_AUDIO_IMAADPCM,
+            "audio_decoder.imaadpcm", "audio_encoder.imaadpcm" },
         { MEDIA_MIMETYPE_AUDIO_EAC3,
             "audio_decoder.eac3", "audio_encoder.eac3" },
+        { MEDIA_MIMETYPE_VIDEO_MJPG,
+            "video_decoder.mjpg", "video_encoder.mjpg" },
 #ifdef DOLBY_ENABLE
         { MEDIA_MIMETYPE_AUDIO_EAC3_JOC,
             "audio_decoder.eac3_joc", NULL },
@@ -2366,6 +2370,17 @@ status_t ACodec::configureCodec(
         } else {
             err = setupEAC3Codec(encoder, numChannels, sampleRate, pcmEncoding);
         }
+    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_IMAADPCM)) {
+        int32_t numChannels;
+        int32_t sampleRate;
+        int32_t blockAlign;
+        if (!msg->findInt32("channel-count", &numChannels)
+                || !msg->findInt32("sample-rate", &sampleRate)
+                || !msg->findInt32("block-align", &blockAlign)) {
+            err = INVALID_OPERATION;
+        }else {
+            err = setIMAADPCMFormat(numChannels, sampleRate, blockAlign);
+        }
     } else {
         err = setupCustomCodec(err, mime, msg);
     }
@@ -2391,6 +2406,10 @@ status_t ACodec::configureCodec(
     int32_t maxInputSize;
     if (msg->findInt32("max-input-size", &maxInputSize)) {
         err = setMinBufferSize(kPortIndexInput, (size_t)maxInputSize);
+        //sprd added. inputPort must be identical to output for raw decoder.
+        if ((err == OK) && !strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_RAW) ) {
+            err = setMinBufferSize(kPortIndexOutput, (size_t)maxInputSize);
+        }
     } else if (!strcmp("OMX.Nvidia.aac.decoder", mComponentName.c_str())) {
         err = setMinBufferSize(kPortIndexInput, 8192);  // XXX
     }
@@ -2408,6 +2427,28 @@ status_t ACodec::configureCodec(
     }
     if (rateFloat > 0) {
         err = setOperatingRate(rateFloat, video);
+    }
+
+    //check thumbnail mode
+    int32_t thumbnail;
+    if (msg->findInt32("thumbnail", &thumbnail)) {
+        OMX_INDEXTYPE index;
+
+        status_t err =
+            mOMX->getExtensionIndex(
+                    mNode,
+                    "OMX.sprd.index.ThumbnailMode",
+                    &index);
+
+        if (err == OK) {
+            OMX_BOOL enable = OMX_TRUE;
+            err = mOMX->setConfig(mNode, index, &enable, sizeof(enable));
+        }
+
+        if (err != OK) {
+            ALOGI("[%s] setConfig(OMX.sprd.index.ThumbnailMode') invalid 0x%08x",
+                    mComponentName.c_str(), err);
+        }
     }
 
     // NOTE: both mBaseOutputFormat and mOutputFormat are outputFormat to signal first frame.
@@ -2985,6 +3026,47 @@ status_t ACodec::setupEAC3Codec(
             sizeof(def));
 }
 
+status_t ACodec::setIMAADPCMFormat(int32_t numChannels, int32_t sampleRate, int32_t blockAlign) {
+    CHECK(!mIsEncoder);
+
+    // port definition
+    OMX_PARAM_PORTDEFINITIONTYPE def;
+    InitOMXParams(&def);
+    def.nPortIndex = kPortIndexInput;
+    status_t err = mOMX->getParameter(
+            mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
+    if (err != OK) {
+        return err;
+    }
+
+    def.format.audio.eEncoding = OMX_AUDIO_CodingIMAADPCM;
+    err = mOMX->setParameter(mNode, OMX_IndexParamPortDefinition,
+            &def, sizeof(def));
+    if (err != OK) {
+        return err;
+    }
+
+    // pcm param
+    OMX_AUDIO_PARAM_IMAADPCMTYPE imaadpcmParams;
+    InitOMXParams(&imaadpcmParams);
+    imaadpcmParams.nPortIndex = kPortIndexInput;
+
+    err = mOMX->getParameter(
+            mNode, OMX_IndexParamAudioImaAdpcm, &imaadpcmParams, sizeof(imaadpcmParams));
+
+    if (err != OK) {
+        return err;
+    }
+
+    imaadpcmParams.nChannels = numChannels;
+    imaadpcmParams.nBitsPerSample = 4;
+    imaadpcmParams.nSampleRate = sampleRate;
+    imaadpcmParams.nBlockAlign = blockAlign;
+
+    return mOMX->setParameter(
+            mNode, OMX_IndexParamAudioImaAdpcm, &imaadpcmParams, sizeof(imaadpcmParams));
+}
+
 static OMX_AUDIO_AMRBANDMODETYPE pickModeFromBitRate(
         bool isAMRWB, int32_t bps) {
     if (isAMRWB) {
@@ -3343,6 +3425,7 @@ static const struct VideoCodingMapEntry {
     { MEDIA_MIMETYPE_VIDEO_MPEG2, OMX_VIDEO_CodingMPEG2 },
     { MEDIA_MIMETYPE_VIDEO_VP8, OMX_VIDEO_CodingVP8 },
     { MEDIA_MIMETYPE_VIDEO_VP9, OMX_VIDEO_CodingVP9 },
+    { MEDIA_MIMETYPE_VIDEO_MJPG, OMX_VIDEO_CodingMJPEG },
     { MEDIA_MIMETYPE_VIDEO_DOLBY_VISION, OMX_VIDEO_CodingDolbyVision },
 };
 
@@ -5212,6 +5295,24 @@ status_t ACodec::getPortFormat(OMX_U32 portIndex, sp<AMessage> &notify) {
                         }
                     }
                     // Fall through to set up mime.
+                }
+
+                case OMX_AUDIO_CodingIMAADPCM:
+                {
+                    OMX_AUDIO_PARAM_PCMMODETYPE params;
+                    InitOMXParams(&params);
+                    params.nPortIndex = portIndex;
+
+                    CHECK_EQ((status_t)OK, mOMX->getParameter(
+                            mNode,
+                            (OMX_INDEXTYPE)OMX_IndexParamAudioImaAdpcm,
+                            &params,
+                            sizeof(params)));
+
+                    notify->setString("mime", MEDIA_MIMETYPE_AUDIO_IMAADPCM);
+                    notify->setInt32("channel-count", params.nChannels);
+                    notify->setInt32("sample-rate", params.nSamplingRate);
+                    break;
                 }
 
                 default:
@@ -7840,6 +7941,34 @@ status_t ACodec::setParameters(const sp<AMessage> &params) {
             ALOGI("[%s] failed setIntraRefreshPeriod. Failure is fine since this key is optional",
                     mComponentName.c_str());
             err = OK;
+        }
+    }
+
+    AString mode;
+    if (params->findString("scene-mode", &mode)){
+        OMX_VIDEO_CONFIG_ENCODERSCENEMODE configParams;
+        InitOMXParams(&configParams);
+        configParams.nPortIndex = kPortIndexOutput;
+        if (mode==AString("Volte")) {
+            configParams.nMode = 1;
+        }
+        else  if (mode==AString("Wfd")) {
+            configParams.nMode = 2;
+        }
+        else {
+            configParams.nMode = 0;
+        }
+
+        status_t err = mOMX->setConfig(
+                mNode,
+                OMX_IndexConfigEncSceneMode,
+                &configParams,
+                sizeof(configParams));
+
+        if (err != OK) {
+            ALOGE("setConfig(OMX_IndexConfigEncSceneMode) failed w/ err %d",
+                    err);
+            return err;
         }
     }
 #ifdef DOLBY_ENABLE
